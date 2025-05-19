@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Search Products{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2>Search Products</h2>
+    
+    <!-- Search Form -->
+    <form method="POST" action="{% url 'search' %}">
+        {% csrf_token %}
+        <div class="row g-3 align-items-end mb-4">
+            <div class="col-md-6">
+                <label for="searched" class="form-label">Search Products</label>
+                <input type="text" class="form-control" id="searched" name="searched" placeholder="Enter product name..." value="{{ searched }}">
+            </div>
+            <div class="col-md-4">
+                <label for="category" class="form-label">Filter by Category</label>
+                <select class="form-select" id="category" name="category">
+                    <option value="">All Categories</option>
+                    <option value="is_protien" {% if category == 'is_protien' %}selected{% endif %}>Protien</option>
+                    <option value="is_muscle building" {% if category == 'is_muscle building' %}selected{% endif %}>Muscle building</option>
+                    <option value="is_pre workout" {% if category == 'is_pre workout' %}selected{% endif %}>pre workout</option>
+                    <option value="is_weight loss" {% if category == 'is_weight loss' %}selected{% endif %}>weight loss</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Search</button>
+            </div>
+        </div>
+    </form>
+    
+    <!-- Search Results -->
+    {% if searched %}
+    <div class="search-results">
+        <h3>Search Results for "{{ searched }}"{% if category %} in category: {{ category|cut:"is_"|title }}{% endif %}</h3>
+        
+        {% if results %}
+            <div class="row row-cols-1 row-cols-md-3 g-4 mt-2">
+                {% for product in results %}
+                <div class="col">
+                    <div class="card h-100">
+                        {% if product.image %}
+                        <img src="{{ product.image.url }}" class="card-img-top" alt="{{ product.name }}">
+                        {% else %}
+                        <div class="card-img-top bg-light text-center py-5">No Image</div>
+                        {% endif %}
+                        <div class="card-body">
+                            <h5 class="card-title">{{ product.tittle }}</h5>
+                            <p class="card-text">{{ product.description|truncatechars:100 }}</p>
+                            <p class="fw-bold">${{ product.price }}</p>
+                            <a href="{% url 'product_details' product.id %}" class="btn btn-outline-primary">View Details</a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info mt-3">
+                No products found matching your search criteria. Please try a different search term or category.
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
