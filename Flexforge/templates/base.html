@@ -370,7 +370,8 @@
                 </div>
             </div>
         </nav>
-        
+        {% if not user.is_authenticated %}
+
         <nav class="second-navbar">
             <ul class="second-nav-links">
                 <li>
@@ -381,6 +382,7 @@
             </ul>
         </nav>
     </header>
+    {% endif %}
   
     <!-- Hero Section -->
     <div class="hero-section">

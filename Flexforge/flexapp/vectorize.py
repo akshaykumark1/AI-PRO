@@ -15,7 +15,6 @@ def process_reviews(reviews):
         return review_vector
     else:
         return None  # No reviews available
-    
 
 def process_search(search):
     if search:
@@ -23,24 +22,22 @@ def process_search(search):
         search_vectors = model.encode(search_list)
         search_vector = search_vectors.mean(axis=0)
         return search_vector
+    return None
 
 # Function to combine product data and reviews to create a vector
 def combine_product_with_reviews(product_data):
     """Combine product metadata and the review essence to generate a combined vector."""
     combined_text = f"Product Name: {product_data['title']}, Rating: {product_data['rating']}, " \
-                    f"shoe_category: {product_data['category']}, " \
-                    f"Description: {product_data['description']}"
-    
+        f"category: {product_data['category']}, " \
+        f"Description: {product_data['description']}"
     product_vector = model.encode(combined_text)  # Vectorize the course metadata
     review_vector = process_reviews(product_data['reviews'])  # Vectorize the reviews
-    
     if review_vector is not None:
         combined_vector = product_vector + review_vector  # Combine the course vector and review vector
     else:
         combined_vector = product_vector  # If no reviews, just use the course data
     print(combined_vector)
     return combined_vector
-
 
 # Vectorize all courses with reviews
 def vectorize_product_with_reviews(df):
@@ -52,8 +49,8 @@ def vectorize_product_with_reviews(df):
     return product_vectors
 
 def combine_user_with_search(user_data):
-    combined_text = f"user_id: {user_data['user_id']},  " \
-                    f"product: {user_data['product']}, " 
+    combined_text = f"user_id: {user_data['user_id']}, " \
+        f"product: {user_data['product']}, "
     user_vector = model.encode(combined_text)
     search_vector = process_search(user_data['search'])
     if search_vector is not None:
@@ -61,8 +58,9 @@ def combine_user_with_search(user_data):
     else:
         combined_vector = user_vector
     return combined_vector
-def vectorize_user_with_search(df): 
-    user_vectors = []    
+
+def vectorize_user_with_search(df):
+    user_vectors = []
     for _, user in df.iterrows():
         user_vector = combine_user_with_search(user)
         user_vectors.append(user_vector)

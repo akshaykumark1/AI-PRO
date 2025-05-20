@@ -12,7 +12,9 @@ import razorpay
 import json
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-
+import pandas as pd
+import numpy as np
+from .vectorize import vectorize_product_with_reviews,vectorize_user_with_search,pd
 
 
 def home(request):
@@ -39,13 +41,15 @@ def signin(request):
             messages.error(request, "Invalid credentials.")
     
     return render(request, 'signin.html')
+
+
 def signup(request):
-    if request.method == 'POST':  
+    if request.method == 'POST':
         email = request.POST.get('email')
         username = request.POST.get('username')
         password = request.POST.get('password')
         confirmpassword = request.POST.get('confirmpassword')
-
+        
         if not username or not email or not password or not confirmpassword:
             messages.error(request, 'All fields are required.')
         elif confirmpassword != password:
@@ -55,14 +59,31 @@ def signup(request):
         elif User.objects.filter(username=username).exists():
             messages.error(request, "Username already exists.")
         else:
-            # Corrected line to use create_user
+            # Create user account
             user = User.objects.create_user(username=username, email=email, password=password)
             user.save()
-            messages.success(request, "Account created successfully!")
-            return redirect('signin')  
-
+            dt= users.objects.create(name=user)
+            dt.save()
+            
+            # Initialize user data for vectorization
+            user_data = [{
+                "user_id": user.id,
+                "product": "",  
+                "search": "",   
+            }]
+            
+            # Create dataframe and generate vector
+            df = pd.DataFrame(user_data)
+            user_vectors = vectorize_user_with_search(df)
+            
+            # Ensure we have a valid vector before saving
+            dt.vector_data = json.dumps(user_vectors[0].tolist())
+            dt.save()
+            print(f"User profile created successfully: {dt}")
+            messages.success(request, "Account created successfully with user vector profile!")
+        return redirect('signin')
+    
     return render(request, "signup.html")
-
 
 
 def userlogout(request):
@@ -99,97 +120,6 @@ def buy_now(request,product_id):
 
 ##########################admin#####################
 
-def order(request):
-    orders = Order.objects.all()
-    return render(request, 'admin/orders.html', {'orders': orders})
-
-def users(request):
-    users = User.objects.filter(user=request.user)
-    return render(request, 'admin/users.html', {'users': users})
-
-def address(request):
-    addresses = Address.objects.filter(user=request.user)
-    return render(request, 'user/address.html', {'addresses': addresses})
-
-def edit_address(request, pk):
-    address = get_object_or_404(Address, pk=pk)
-    if request.method == 'POST':
-        form = AddressForm(request.POST, instance=address)
-        if form.is_valid():
-            form.save()
-            return redirect('address')  # Change to your address list view name
-    else:
-        form = AddressForm(instance=address)
-    return render(request, 'user/edit_address.html', {'form': form})
-
-def delete_address(request, pk):
-    address = get_object_or_404(Address, pk=pk)
-    address.delete()
-    return redirect('address') 
-
-
-
-
-def home(request):
-    product=Product.objects.all()
-    return render(request, 'base.html',{'product':product})
-def signin(request):
-    if request.user.is_authenticated:
-        return redirect('home')
-    
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        
-        user = authenticate(username=username, password=password)
-        
-        if user is not None:
-            login(request, user)
-            request.session['username'] = username
-            if  user.is_superuser:
-                return redirect('admin')
-            else:
-                return redirect('home')
-        else:
-            messages.error(request, "Invalid credentials.")
-    
-    return render(request, 'signin.html')
-def signup(request):
-    if request.method == 'POST':  
-        email = request.POST.get('email')
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        confirmpassword = request.POST.get('confirmpassword')
-
-        if not username or not email or not password or not confirmpassword:
-            messages.error(request, 'All fields are required.')
-        elif confirmpassword != password:
-            messages.error(request, "Passwords do not match.")
-        elif User.objects.filter(email=email).exists():
-            messages.error(request, "Email already exists.")
-        elif User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists.")
-        else:
-            # Corrected line to use create_user
-            user = User.objects.create_user(username=username, email=email, password=password)
-            user.save()
-            messages.success(request, "Account created successfully!")
-            return redirect('signin')  
-
-    return render(request, "signup.html")
-
-
-
-def userlogout(request):
-    request.session.flush()
-    return render(request, 'base.html')
-
-
-
-
-
-
-
 
 
 def orders(request):
@@ -210,22 +140,6 @@ def wheretobuy(request):
 def buy_now(request,product_id):    
     return render(request,'buy_now.html')
 
-
-
-##########################admin#####################
-
-def order(request):
-    orders = Order.objects.all()
-    return render(request, 'admin/orders.html', {'orders': orders})
-
-def users(request):
-    users = User.objects.filter(user=request.user)
-    return render(request, 'admin/users.html', {'users': users})
-
-def address(request):
-    addresses = Address.objects.filter(user=request.user)
-    return render(request, 'user/address.html', {'addresses': addresses})
-
 def edit_address(request, pk):
     address = get_object_or_404(Address, pk=pk)
     if request.method == 'POST':
@@ -237,6 +151,20 @@ def edit_address(request, pk):
         form = AddressForm(instance=address)
     return render(request, 'user/edit_address.html', {'form': form})
 
+
+##########################admin#####################
+
+def order(request):
+    orders = Order.objects.all()
+    return render(request, 'admin/orders.html', {'orders': orders})
+
+
+def address(request):
+    addresses = Address.objects.filter(user=request.user)
+    return render(request, 'user/address.html', {'addresses': addresses})
+
+
+
 def delete_address(request, pk):
     address = get_object_or_404(Address, pk=pk)
     address.delete()
@@ -244,43 +172,66 @@ def delete_address(request, pk):
 
 
 
+
+def getuser(request):
+    return request.session.get('user')
+
+def filter_price(data, price):
+    price2 = []
+    for i in data:
+        for j in price:
+            if i.pk == j.product.pk:
+                price2.append(j)
+                break
+    return price2
+
+
+def types(request):
+    type2 = []
+    for i in Product.objects.all():
+        if i.category and i.category.name not in type2:
+            type2.append(i.category.name)
+    return type2
 
 
 def admin(request):
     context = {
-        'products': Product.objects.all()[::-1],
-        'orders': Order.objects.all()[::-1],
-
+        'products': Product.objects.all().order_by('-id'),
+        'orders': Order.objects.all().order_by('-id'),
     }
     return render(request, 'admin/admin.html', context)
 
 
-
-
-
 def add_product(request):
     if request.method == "POST":
-        # Get form data
-        title = request.POST.get("title")
-        description = request.POST.get("description")
-        price = request.POST.get("price")
-        category_id = request.POST.get("category")
-        original_price = request.POST.get("original_price")
-        discount = request.POST.get("discount")
-        delivery_date = request.POST.get("delivery_date")
-        
-        # Get image files
-        image1 = request.FILES.get("image1")
-        image2 = request.FILES.get("image2")
-        image3 = request.FILES.get("image3")
-        image4 = request.FILES.get("image4")
-        image5 = request.FILES.get("image5")
-        
+        categories = Category.objects.all()
         try:
-            # Get category object
-            category = Category.objects.get(id=category_id)
-            
-            # Create product
+            title = request.POST.get("title")
+            description = request.POST.get("description")
+            price = request.POST.get("price")
+            original_price = request.POST.get("original_price")
+            discount = request.POST.get("discount", 0)
+            delivery_date = request.POST.get("delivery_date")
+            category_id = request.POST.get("category")
+
+            image1 = request.FILES.get("image1")
+            image2 = request.FILES.get("image2")
+            image3 = request.FILES.get("image3")
+            image4 = request.FILES.get("image4")
+            image5 = request.FILES.get("image5")
+
+            if not title or not description or not price:
+                messages.error(request, "Title, description, and price are required fields.")
+                return render(request, 'admin/add_product.html', {'categories': categories})
+
+            category = None
+            if category_id:
+                try:
+                    category = Category.objects.get(id=category_id)
+                except Category.DoesNotExist:
+                    messages.error(request, "Selected category does not exist.")
+                    return render(request, 'admin/add_product.html', {'categories': categories})
+
             product = Product.objects.create(
                 title=title,
                 description=description,
@@ -295,31 +246,34 @@ def add_product(request):
                 image4=image4,
                 image5=image5,
             )
-            
-            # Vector processing - wrapped in try/except to prevent failure
+            # Create vector data (optional)
             try:
                 df = pd.DataFrame([{
-                "id": product.id,
-                "name": title,
-                "rating": 0,
-                "shoe_category": category.name,
-                "description": description,
-                "reviews": '',
-            }])
+                    "id": product.id,
+                    "name": title,
+                    "rating": 0,
+                    "category": category.name if category else "",
+                    "description": description,
+                    "reviews": '',
+                }])
                 product_vector = vectorize_product_with_reviews(df)
                 product.vector_data = json.dumps(product_vector[0].tolist())
                 product.save()
-
+                messages.success(request, "Product added successfully!")
             except Exception as e:
-                print(f"Vector processing error: {e}")
-            
-            # Success message
-            messages.success(request, "Product added successfully!")
+                print(f"Vectorization error: {e}")
+                messages.warning(request, "Product added, but vectorization failed.")
+
+            return redirect("ad_pro")  # Go back to add product form or change to 'admin_panel'
+
         except Exception as e:
-            print(f"Error adding product: {e}")
-            messages.error(request, f"Error adding product: {e}")
-            
-    return redirect("admin_home")
+            messages.error(request, f"Error adding product: {str(e)}")
+
+    # Fallback in case of GET or error
+    categories = Category.objects.all()
+    return render(request, 'admin/add_product.html', {'categories': categories})
+
+
 
 def edit_product(request, product_id):
     product = get_object_or_404(Product, id=product_id)
