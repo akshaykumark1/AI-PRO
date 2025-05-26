@@ -25,7 +25,8 @@ urlpatterns = [
     path('buy-now<int:product_id>/', views.buy_now, name='buy_now'),
     # Change this line
     path('add-to-cart/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
-    path('product_details/<int:pk>/',views.product_detail, name='product_detail'),   
+    path('product_details/<int:pk>/',views.product_detail, name='product_detail'),
+    path('product/<int:pk>/review/', views.addReview, name='addReview'),
     path('account',views.account,name='account'),
     # path('product')
 

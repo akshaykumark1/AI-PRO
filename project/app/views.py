@@ -10,18 +10,16 @@ from django.contrib.auth.models import User
 from .forms import *
 import razorpay
 import json
+from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 import pandas as pd
 from django.db.models import Case, When
 from .read_content import *
+
 import numpy as np
 from .vectorize import vectorize_product_with_reviews,vectorize_user_with_search,pd
 
-
-# def home(request):
-#     product=Product.objects.all()
-#     return render(request, 'base.html',{'product':product})
 def signin(request):
     if request.user.is_authenticated:
         print(request.user)
@@ -196,14 +194,13 @@ def types(request):
             type2.append(i.category.name)
     return type2
 
-
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def search_func(request):
     if request.method == 'POST':
-        inp = request.POST.get('search', '').strip()
+        inp = request.POST.get('searched', '').strip()
 
         if not inp:
-            # No input provided — redirect to home
             return redirect('home')
 
         auth_user = None
@@ -221,17 +218,20 @@ def search_func(request):
             SearchHistory.objects.create(query=inp, user=users_data)
 
             # Get search history
-            user_search = SearchHistory.objects.filter(user=users_data)
-            print("result",user_search)
+            user_search_queries = [search.query for search in SearchHistory.objects.filter(user=users_data)]
 
-            # Collect previously viewed or purchased product titles (if available)
-            user_products = []  # Add your logic here if you track product views/purchases
+            # Collect previously viewed or purchased product titles
+            user_products = [
+                view.product.title for view in ViewHistory.objects.filter(user=users_data)
+            ] + [
+                order.product.title for order in Order.objects.filter(user=auth_user)
+            ]
 
             # Prepare data for vectorization
             user_data = [{
                 'user_id': auth_user.id,
                 'product': ','.join(user_products),
-                'search': ','.join(user_search),
+                'search': ','.join(user_search_queries),
             }]
             df = pd.DataFrame(user_data)
 
@@ -240,10 +240,10 @@ def search_func(request):
             users_data.vector_data = json.dumps(user_vectors[0].tolist())
             users_data.save()
 
-        # Search products
-        products_by_name = Product.objects.filter(title__icontains=inp)
-        products_by_category = Product.objects.filter(category__name__icontains=inp)
-        products = (products_by_name | products_by_category).distinct()
+        # Search products using icontains
+        products = Product.objects.filter(
+            Q(title__icontains=inp) | Q(description__icontains=inp) | Q(category__name__icontains=inp)
+        ).distinct()
 
         return render(request, 'user/search.html', {
             'category': types(request),
@@ -252,38 +252,90 @@ def search_func(request):
             'products': products
         })
 
-    # If request is GET or invalid
     return redirect('home')
+
+
+
+
+
+# def home(request):
+#     data = Product.objects.all()
+#     products = []
+
+#     product_ids = [pro.pk for pro in data]
+#     product_vectors = [json.loads(pro.vector_data) for pro in data]
+#     product_vectors = np.array(product_vectors)
+#     product_vectors = torch.tensor(product_vectors)
+
+#     if request.user.is_authenticated:
+#         try:
+#             print("print", request.user.username)
+#             user = User.objects.get(username=request.user.username)
+#             user = users.objects.get(name=user)  # Ensure 'users' is correct
+#             user_vector = json.loads(user.vector_data)
+#             recommend_products = recommend_product(user_vector, product_vectors, product_ids, top_n=12)
+#             print(recommend_products)
+#             products = [i[0] for i in recommend_products]
+#             preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(products)])
+#             products = Product.objects.filter(pk__in=products).order_by(preserved_order)
+#             print(products)
+#         except (User.DoesNotExist, users.DoesNotExist):
+#             products = Product.objects.all()[:12]  # Fallback
+#     else:
+#         products = Product.objects.all()[:12]  # Fallback for unauthenticated users
+
+#     data2 = Product.objects.all()[:4]
+#     data3 = Product.objects.all().order_by('-id')[:3]
+
+#     return render(request, 'base.html', {
+#         'data': data2,
+#         'products': products,
+#         'user': request.user,
+#         'type': types(request)
+#     })
+
 
 def home(request):
     data = Product.objects.all()
     products = []
 
-    
     product_ids = [pro.pk for pro in data]
-    product_vectors = [json.loads(pro.vector_data) for pro in data]
-    product_vectors = np.array(product_vectors)  # Combine list of NumPy arrays to one array
-    product_vectors = torch.tensor(product_vectors)
-    print("print",request.session['username'])
-    if 'username' in request.session:
+    product_vectors = [json.loads(pro.vector_data) for pro in data if pro.vector_data]
+    if not product_vectors:
+        print("No valid product vectors found, falling back to default")
+        products = Product.objects.all()[:12]
+    else:
+        product_vectors = np.array(product_vectors)
+        product_vectors = torch.tensor(product_vectors)
 
-        user = User.objects.get(username=request.session['username'])
-        print(request.session['username'])
-        user = users.objects.get(name=user)
-        user_vector = json.loads(user.vector_data)
-        recommend_products = recommend_product(user_vector, product_vectors, product_ids,top_n=12) 
-        print(recommend_products)
-        products = [i[0] for i  in recommend_products]
-        preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(products)])
-        products = Product.objects.filter(pk__in=products).order_by(preserved_order)
-        print(products)
+        if request.user.is_authenticated:
+            try:
+                print("Authenticated user:", request.user.username)
+                user = User.objects.get(username=request.user.username)
+                user_profile = users.objects.get(name=user)
+                user_vector = json.loads(user_profile.vector_data)
+                recommend_products = recommend_product(user_vector, product_vectors, product_ids, top_n=12)
+                print("Recommended products:", recommend_products)
+                products = [i[0] for i in recommend_products]
+                preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(products)])
+                products = Product.objects.filter(pk__in=products).order_by(preserved_order)
+                print("Products to render:", [p.title for p in products])
+            except (User.DoesNotExist, users.DoesNotExist) as e:
+                print("Error fetching user:", e)
+                products = Product.objects.all()[:12]
+        else:
+            print("Unauthenticated user, showing default products")
+            products = Product.objects.all()[:12]
 
-    
-    data2=Product.objects.all()[:4]
-    data3=Product.objects.all()[::-1][:3]
-   
-    return render(request,'base.html',{'data':data2,'products':products,'user':request.user,'type':types(request)})
+    data2 = Product.objects.all()[:4]
+    data3 = Product.objects.all().order_by('-id')[:3]
 
+    return render(request, 'base.html', {
+        'data': data2,
+        'products': products,
+        'user': request.user,
+        'type': types(request),
+    })
 
 
 def admin(request):
@@ -426,26 +478,6 @@ def add_category(request):
 
 ################################################################################
 
-def search1(request):
-    if request.method == 'POST':
-        searched = request.POST.get('searched', '').strip()  # Get the search term
-        category = request.POST.get('category', '')  # Get the selected category (if any)
-        
-        # Filter products based on the search term and category
-        results = Product.objects.all()
-        
-        if searched:
-            results = results.filter(title__icontains=searched)
-        
-        if category:
-            # Dynamically filter based on the category field
-            category_filter = {f"{category}": True}
-            results = results.filter(**category_filter)
-
-        return render(request, 'user/search.html', {'searched': searched, 'category': category, 'results': results})
-    
-    # Render the empty search page for GET requests
-    return render(request, 'user/search.html', {'searched': '', 'category': '', 'results': []})
 
 def product_display(request):
     products = Product.objects.all()
@@ -615,22 +647,241 @@ def remove_from_cart(request, id):
 
 
 # For implementing Add to Cart button in product detail page
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
 def product_detail(request, pk):
-    product = get_object_or_404(Product, id=pk)  # Changed from filter() to get_object_or_404()
+    # Fetch the product or return 404
+    product = get_object_or_404(Product, id=pk)
+
+    # Initialize context
     cart_product_ids = []
-    
+    cart_item_count = 0
+    is_reviewed = False
+    reviews_list = reviews.objects.filter(pname=product)
+
+    # Handle authenticated user
     if request.user.is_authenticated:
+        # Get cart details
         cart_product_ids = list(Cart.objects.filter(user=request.user).values_list('product_id', flat=True))
         cart_item_count = Cart.objects.filter(user=request.user).count()
-    else:
-        cart_item_count = 0 
-    
+
+        # Get user from users model
+        try:
+            user_profile = users.objects.get(name=request.user)
+        except users.DoesNotExist:
+            user_profile = None
+
+        if user_profile:
+            # Save view history
+            ViewHistory.objects.get_or_create(user=user_profile, product=product)
+
+            # Get existing viewed products
+            existing_user_data = ViewHistory.objects.filter(user=user_profile)
+            existing_products = [history.product.title for history in existing_user_data]
+
+            # Prepare data for vectorization
+            data = [{
+                'user_id': user_profile.id,
+                'product': ','.join(existing_products),
+                'search': ''  # Empty search for now
+            }]
+            df = pd.DataFrame(data)
+
+            # Vectorize and save
+            try:
+                user_vectors = vectorize_user_with_search(df)
+                user_profile.vector_data = json.dumps(user_vectors[0].tolist())
+                user_profile.save()
+            except Exception as e:
+                print(f"Vectorization error: {e}")
+
+            # Check if user has reviewed the product
+            is_reviewed = reviews.objects.filter(uname=user_profile, pname=product).exists()
+
+    # Prepare context for template
     context = {
         'product': product,
         'cart_item_count': cart_item_count,
-        'cart_product_ids': cart_product_ids
+        'cart_product_ids': cart_product_ids,
+        'reviews': reviews_list,
+        'is_reviewed': is_reviewed,
+        'user': request.user,
     }
+
     return render(request, 'user/product_detail.html', context)
+
+# def addReview(request, pk):
+#     if request.method == 'POST':
+#         rating = request.POST.get('rating')
+#         description = request.POST.get('description')
+        
+#         # Validate input
+#         if not rating or not description:
+#             messages.error(request, "Rating and description are required.")
+#             return redirect('product_detail', pk=pk)
+
+#         # Validate rating
+#         try:
+#             rating = int(rating)
+#             if rating < 1 or rating > 5:
+#                 messages.error(request, "Invalid rating value.")
+#                 return redirect('product_detail', pk=pk)
+#         except ValueError:
+#             messages.error(request, "Rating must be a number.")
+#             return redirect('product_detail', pk=pk)
+
+#         # Fetch product
+#         product = get_object_or_404(Product, pk=pk)
+        
+#         # Fetch user profile
+#         try:
+#             user_profile = users.objects.get(name=request.user)
+#         except users.DoesNotExist:
+#             messages.error(request, "User profile not found.")
+#             return redirect('product_detail', pk=pk)
+
+#         # Check if user has already reviewed this product
+#         if reviews.objects.filter(uname=user_profile, pname=product).exists():
+#             messages.error(request, "You have already reviewed this product.")
+#             return redirect('product_detail', pk=pk)
+
+#         # Create review
+#         review = reviews.objects.create(
+#             rating=rating,
+#             description=description,
+#             uname=user_profile,
+#             pname=product
+#         )
+
+#         # Update product rating
+#         rev = reviews.objects.filter(pname=product)
+#         total = [i.rating for i in rev]
+#         if total:
+#             total_rating = round(sum(total) / len(total), 1)
+#             product.rating = total_rating
+#         else:
+#             product.rating = float(rating)
+#         product.save()
+
+#         # Update product vector with reviews
+#         comments = [i.description for i in rev]
+#         pro_data = [{
+#             "id": product.id,
+#             "title": product.title,
+#             "rating": product.rating,
+#             "category": product.category.name if product.category else "",
+#             "description": product.description,
+#             "reviews": ','.join(comments)
+#         }]
+#         try:
+#             df = pd.DataFrame(pro_data)
+#             product_vector = vectorize_product_with_reviews(df)
+#             product.vector_data = json.dumps(product_vector[0].tolist())
+#             product.save()
+#         except Exception as e:
+#             messages.error(request, "Error processing review data.")
+#             return redirect('product_detail', pk=pk)
+
+#         messages.success(request, "Review submitted successfully!")
+#         return redirect('product_detail', pk=pk)
+#     else:
+#         return redirect('product_detail', pk=pk)
+
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect
+from .models import reviews, Product, users
+import pandas as pd
+import json
+from .vectorize import vectorize_product_with_reviews
+
+def addReview(request, pk):
+    if not request.user.is_authenticated:
+        messages.error(request, "You must be logged in to submit a review.")
+        return redirect('signin')
+
+    if request.method == 'POST':
+        rating = request.POST.get('rating')
+        description = request.POST.get('description')
+        
+        # Validate input
+        if not rating or not description:
+            messages.error(request, "Rating and description are required.")
+            return redirect('product_detail', pk=pk)
+
+        # Validate rating
+        try:
+            rating = int(rating)
+            if rating < 1 or rating > 5:
+                messages.error(request, "Rating must be between 1 and 5.")
+                return redirect('product_detail', pk=pk)
+        except ValueError:
+            messages.error(request, "Rating must be a valid number.")
+            return redirect('product_detail', pk=pk)
+
+        # Fetch product
+        product = get_object_or_404(Product, pk=pk)
+        
+        # Fetch user profile
+        try:
+            user_profile = users.objects.get(name=request.user)
+        except users.DoesNotExist:
+            messages.error(request, "User profile not found.")
+            return redirect('product_detail', pk=pk)
+
+        # Check if user has already reviewed this product
+        if reviews.objects.filter(uname=user_profile, pname=product).exists():
+            messages.error(request, "You have already reviewed this product.")
+            return redirect('product_detail', pk=pk)
+
+        # Create review
+        try:
+            review = reviews.objects.create(
+                rating=rating,
+                description=description,
+                uname=user_profile,
+                pname=product
+            )
+        except Exception as e:
+            messages.error(request, f"Error saving review: {str(e)}")
+            return redirect('product_detail', pk=pk)
+
+        # Update product rating
+        try:
+            rev = reviews.objects.filter(pname=product)
+            total = [i.rating for i in rev]
+            if total:
+                total_rating = round(sum(total) / len(total), 1)
+                product.rating = total_rating
+            else:
+                product.rating = float(rating)
+            product.save()
+        except Exception as e:
+            messages.error(request, f"Error updating product rating: {str(e)}")
+            return redirect('product_detail', pk=pk)
+
+        # Update product vector with reviews
+        try:
+            comments = [i.description for i in rev]
+            pro_data = [{
+                "id": product.id,
+                "title": product.title,
+                "rating": product.rating,
+                "category": product.category.name if product.category else "",
+                "description": product.description,
+                "reviews": ','.join(comments)
+            }]
+            df = pd.DataFrame(pro_data)
+            product_vector = vectorize_product_with_reviews(df)
+            product.vector_data = json.dumps(product_vector[0].tolist())
+            product.save()
+        except Exception as e:
+            messages.error(request, f"Error updating product vector: {str(e)}")
+            return redirect('product_detail', pk=pk)
+
+        messages.success(request, "Review submitted successfully!")
+        return redirect('product_detail', pk=pk)
+    
+    return redirect('product_detail', pk=pk)
 
 #----------------------------wishlist------------------------------------------------------#
 
@@ -1165,20 +1416,64 @@ def remove_from_cart(request, id):
 
 
 # For implementing Add to Cart button in product detail page
-def product_detail(request, pk):
-    product = get_object_or_404(Product, id=pk)  # Changed from filter() to get_object_or_404()
-    cart_product_ids = []
+# def product_detail(request, pk):
+#     product = get_object_or_404(Product, id=pk)  # Changed from filter() to get_object_or_404()
+#     cart_product_ids = []
     
+#     if request.user.is_authenticated:
+#         cart_product_ids = list(Cart.objects.filter(user=request.user).values_list('product_id', flat=True))
+#         cart_item_count = Cart.objects.filter(user=request.user).count()
+#     else:
+#         cart_item_count = 0 
+    
+#     context = {
+#         'product': product,
+#         'cart_item_count': cart_item_count,
+#         'cart_product_ids': cart_product_ids
+#     }
+#     return render(request, 'user/product_detail.html', context)
+
+
+
+def product_detail(request, pk):
+    product = get_object_or_404(Product, id=pk)
+    cart_product_ids = []
+    cart_item_count = 0
+    is_reviewed = False
+    reviews_list = reviews.objects.filter(pname=product)
+
     if request.user.is_authenticated:
         cart_product_ids = list(Cart.objects.filter(user=request.user).values_list('product_id', flat=True))
         cart_item_count = Cart.objects.filter(user=request.user).count()
-    else:
-        cart_item_count = 0 
-    
+        try:
+            user_profile = users.objects.get(name=request.user)
+        except users.DoesNotExist:
+            user_profile = None
+        if user_profile:
+            ViewHistory.objects.get_or_create(user=user_profile, product=product)
+            existing_user_data = ViewHistory.objects.filter(user=user_profile)
+            existing_products = [history.product.title for history in existing_user_data]
+            data = [{
+                'user_id': user_profile.id,
+                'product': ','.join(existing_products),
+                'search': ''
+            }]
+            df = pd.DataFrame(data)
+            try:
+                user_vectors = vectorize_user_with_search(df)
+                user_profile.vector_data = json.dumps(user_vectors[0].tolist())
+                user_profile.save()
+            except Exception as e:
+                print(f"Vectorization error: {e}")
+            is_reviewed = reviews.objects.filter(uname=user_profile, pname=product).exists()
+
     context = {
         'product': product,
         'cart_item_count': cart_item_count,
-        'cart_product_ids': cart_product_ids
+        'cart_product_ids': cart_product_ids,
+        'reviews': reviews_list,
+        'is_reviewed': is_reviewed,
+        'user': request.user,
     }
     return render(request, 'user/product_detail.html', context)
 
