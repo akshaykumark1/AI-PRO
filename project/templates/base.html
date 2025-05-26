@@ -345,24 +345,25 @@
                     </ul>
     
                     <!-- Right section with Search Bar, User, Logout, and Cart -->
-                    
-                     
+                    <form class="search-form me-md-3 mb-2 mb-md-0" role="search" action="{% url 'search_func' %}" method="POST">
+                        {% csrf_token %}
+                        <div class="input-group">
+                            <input id="search" class="form-control" type="text" placeholder="Search Products" aria-label="Search" name="searched">
+                            <button class="btn btn-outline-dark" type="submit">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+                        </div>
+                    </form>
+
                         {% if user.is_authenticated %}
                                             <!-- Right section with Search Bar, User, Logout, and Cart -->
                     <div class="d-flex align-items-center flex-wrap justify-content-center">
-                        <form class="search-form me-md-3 mb-2 mb-md-0" role="search" action="{% url 'search_func' %}" method="POST">
-                            {% csrf_token %}
-                            <div class="input-group">
-                                <input id="search" class="form-control" type="text" placeholder="Search Products" aria-label="Search" name="searched">
-                                <button class="btn btn-outline-dark" type="submit">
-                                    <i class="fa-solid fa-magnifying-glass"></i>
-                                </button>
-                            </div>
-                        </form>
+                      
                         <div class="d-flex flex-wrap justify-content-center">
                             <a href="{% url 'account' %}" class="nav-link me-3 mb-2 mb-md-0"><i class="fa-solid fa-user me-1"></i></a>
-                            <a href="{% url 'userlogout' %}" class="nav-link me-3 mb-2 mb-md-0"><i class="fa-solid fa-right-from-bracket me-1"></i></a>
                             <a href="{% url 'wishlist' %}" class="nav-link me-3 mb-2 mb-md-0"><i class="fa-solid fa-heart me-1"></i></a>
+                            <a href="{% url 'userlogout' %}" class="nav-link me-3 mb-2 mb-md-0"><i class="fa-solid fa-right-from-bracket me-1"></i></a>
+
                             <a href="{% url 'cart' %}" class="nav-link mb-2 mb-md-0">
                                 <img src="{% static 'images/cart.png' %}" alt="Cart" width="24" height="24">
                             </a>
@@ -442,7 +443,6 @@
 
 
 
-{% if user.is_authenticated %}
 <div class="container my-5">
     <div class="text-center mb-4">
         <h2 class="fw-bold">Recommended Products</h2>
@@ -450,19 +450,18 @@
     </div>
 
     <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
-        {% for item in price %}
+        {% for item in products %}
         <div class="col">
             <div class="card h-100 shadow-sm">
-                <a href="{% url 'product_detail' item.product.id %}" class="text-decoration-none text-dark">
-                    <img src="{{ item.product.image.url }}" class="card-img-top" alt="{{ item.product.name }}">
+                    <img src="{{ item.image1.url }}" class="card-img-top" alt="{{ item.title }}">
                     <div class="card-body">
-                        <h5 class="card-title">{{ item.product.title }}</h5>
-                        <p class="card-text text-muted">{{ item.product.category }}</p>
+                        <h5 class="card-title">{{ item.title }}</h5>
+                        <p class="card-text text-muted">{{ item.category }}</p>
                     </div>
                 </a>
                 <div class="card-footer d-flex justify-content-between align-items-center">
-                    <span class="fw-bold text-success">${{ item.product.offerprice|floatformat:2 }}</span>
-                    <small class="text-muted text-decoration-line-through">${{ item.product.price|floatformat:2 }}</small>
+                    <span class="fw-bold text-success">${{ item.offerprice|floatformat:2 }}</span>
+                    <small class="text-muted text-decoration-line-through">${{ item.price|floatformat:2 }}</small>
                 </div>
             </div>
         </div>
@@ -475,7 +474,6 @@
         {% endfor %}
     </div>
 </div>
-{% endif %}
 
 
     <!-- Premium Products Section -->

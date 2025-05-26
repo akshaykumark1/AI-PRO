@@ -1,115 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Checkout - Payment</title>
-  <!-- Add Bootstrap CSS (version 5.x) -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KyZXEJG3QhqLMpG8r+KnujsC7j/tf0zzyy1JDbpdmRPbU7xtxxSYlX7B9eI/tDgi" crossorigin="anonymous">
-  <!-- Add a custom font -->
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trippify | Secure Checkout</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+
+  <!-- Custom Styling -->
   <style>
     body {
-      font-family: 'Roboto', sans-serif;
+      font-family: 'Inter', sans-serif;
+      background-color: #f8f9fa;
     }
-    .card {
-      border-radius: 12px;
+
+    .checkout-wrapper {
+      max-width: 960px;
+      margin: 50px auto;
     }
-    .table td, .table th {
+
+    .card-custom {
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+      background: #fff;
+    }
+
+    .table th, .table td {
       vertical-align: middle;
     }
-    .razorpay-button {
-      background-color: #F37254;
-      border: none;
-      color: white;
-      padding: 12px 40px;
-      border-radius: 8px;
+
+    .btn-razorpay {
+      background-color: #f37254;
+      color: #fff;
+      padding: 12px 28px;
       font-size: 16px;
-      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 500;
+      border: none;
+      transition: background 0.3s ease;
     }
-    .razorpay-button:hover {
-      background-color: #e13f3a;
+
+    .btn-razorpay:hover {
+      background-color: #d64b3b;
     }
-    .container-custom {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding-top: 50px;
+
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .checkout-wrapper {
+        padding: 0 16px;
+      }
     }
   </style>
 </head>
 <body>
 
-  <div class="container-custom">
-    <!-- Checkout Header -->
-    <div class="text-center mb-5">
-      <h2 class="display-4">Checkout</h2>
-      <p class="lead">Complete your purchase by making a payment</p>
+<div class="checkout-wrapper">
+  <!-- Header -->
+  <div class="text-center mb-5">
+    <h1 class="display-5 fw-bold">Secure Checkout</h1>
+    <p class="text-muted">Confirm your items and pay securely</p>
+  </div>
+
+  <!-- Cart Items -->
+  <div class="card card-custom p-4 mb-4">
+    <h4 class="section-title">Your Cart</h4>
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Product</th>
+            <th class="text-center">Qty</th>
+            <th class="text-end">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in cart_items %}
+          <tr>
+            <td>{{ item.product.title }}</td>
+            <td class="text-center">{{ item.quantity }}</td>
+            <td class="text-end">₹{{ item.price }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-
-    <!-- Cart Items Section -->
-    <div class="row mb-4">
-      <div class="col-12">
-        <div class="card shadow-sm p-4">
-          <h4 class="mb-3">Cart Items</h4>
-          <table class="table table-bordered table-striped">
-            <thead>
-              <tr>
-                <th>Product Name</th>
-                <th>Quantity</th>
-                <th>Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in cart_items %}
-              <tr>
-                <td>{{ item.product.title }}</td>
-                <td>{{ item.quantity }}</td>
-                <td>₹{{ item.price }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <div class="d-flex justify-content-between mt-4">
-            <h5 class="text-end">Total Amount: ₹{{ total_amount }}</h5>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Razorpay Payment Section -->
-    <div class="row">
-      <div class="col-12">
-        <div class="card shadow-sm p-4">
-          <h4 class="mb-3">Payment Details</h4>
-          <form action="{{ callback_url }}" method="POST" id="razorpay-form">
-            <input type="hidden" name="razorpay_order_id" value="{{ order_id }}">
-            <input type="hidden" name="razorpay_payment_id" value="">
-            <input type="hidden" name="razorpay_signature" value="">
-
-            <div class="d-grid gap-2">
-              <button type="submit" class="razorpay-button" id="razorpay-button">Pay Now</button>
-            </div>
-          </form>
-        </div>
-      </div>
+    <div class="text-end mt-3">
+      <h5 class="fw-semibold">Total: ₹{{ total_amount }}</h5>
     </div>
   </div>
 
-  <!-- Add Bootstrap JS and Razorpay JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js" integrity="sha384-6ka97c7Jz+0OmKC2L3DdkZyoNcbK7X4Bl4lnj6Kgw1yL0mQoIt9sABwUjo++osRS" crossorigin="anonymous"></script>
-  
-  <!-- Razorpay Checkout JS -->
-  <script src="https://checkout.razorpay.com/v1/checkout.js"
-          data-key="{{ razorpay_key }}"
-          data-currency="INR"
-          data-order_id="{{ order_id }}"
-          data-name="Your Site Name"
-          data-description="Checkout"
-          data-image="https://your-site-logo.com"
-          data-prefill.name="{{ user_data.first_name }}"
-          data-prefill.email="{{ user_data.email }}"
-          data-theme.color="#F37254">
-  </script>
-  
+  <!-- Payment Section -->
+  <div class="card card-custom p-4">
+    <h4 class="section-title">Payment</h4>
+
+    <form action="{{ callback_url }}" method="POST" id="razorpay-form">
+      <input type="hidden" name="razorpay_order_id" value="{{ order_id }}">
+      <input type="hidden" name="razorpay_payment_id" value="">
+      <input type="hidden" name="razorpay_signature" value="">
+
+      <div class="d-grid">
+        <button type="submit" class="btn btn-razorpay" id="razorpay-button">Pay Now</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Razorpay JS -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"
+        data-key="{{ razorpay_key }}"
+        data-currency="INR"
+        data-order_id="{{ order_id }}"
+        data-name="Trippify"
+        data-description="Travel Booking Payment"
+        data-image="https://your-site-logo.com/logo.png"
+        data-prefill.name="{{ user_data.first_name }}"
+        data-prefill.email="{{ user_data.email }}"
+        data-theme.color="#f37254">
+</script>
+
 </body>
 </html>

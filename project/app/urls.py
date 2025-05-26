@@ -6,7 +6,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('', views.home, name='home'),
-    path('accounts/login/', views.signin, name='signin'),  # Ensure this line is here
+    path('login/', views.signin, name='signin'),  # Ensure this line is here
     path('cart/', views.Cart_view, name='cart'),
     path('remove_from_cart/<id>',views.remove_from_cart,name='remove_from_cart'),
     path('signup',views.signup,name='signup'),

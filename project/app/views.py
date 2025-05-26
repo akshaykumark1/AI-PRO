@@ -13,15 +13,18 @@ import json
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 import pandas as pd
+from django.db.models import Case, When
+from .read_content import *
 import numpy as np
 from .vectorize import vectorize_product_with_reviews,vectorize_user_with_search,pd
 
 
-def home(request):
-    product=Product.objects.all()
-    return render(request, 'base.html',{'product':product})
+# def home(request):
+#     product=Product.objects.all()
+#     return render(request, 'base.html',{'product':product})
 def signin(request):
     if request.user.is_authenticated:
+        print(request.user)
         return redirect('home')
     
     if request.method == 'POST':
@@ -174,7 +177,7 @@ def delete_address(request, pk):
 
 
 def getuser(request):
-    return request.session.get('user')
+    return request.session.get('username')
 
 def filter_price(data, price):
     price2 = []
@@ -194,60 +197,92 @@ def types(request):
     return type2
 
 
+
 def search_func(request):
     if request.method == 'POST':
-        inp = request.POST['search']
+        inp = request.POST.get('search', '').strip()
+
+        if not inp:
+            # No input provided — redirect to home
+            return redirect('home')
+
         auth_user = None
         users_data = None
 
-        if 'user' in request.session:
+        if 'username' in request.session:
             try:
-                auth_user = User.objects.get(username=request.session['user'])
+                auth_user = User.objects.get(username=request.session['username'])
                 users_data = users.objects.get(name=auth_user)
             except (User.DoesNotExist, users.DoesNotExist):
-                auth_user = None
-                users_data = None
+                pass
 
         if auth_user and users_data:
-            # Save search query
+            # Save search history
             SearchHistory.objects.create(query=inp, user=users_data)
 
-            # Get search and view history
+            # Get search history
             user_search = SearchHistory.objects.filter(user=users_data)
-            user_search = [s.query for s in user_search]
+            print("result",user_search)
 
-            # Prepare DataFrame for vectorization
+            # Collect previously viewed or purchased product titles (if available)
+            user_products = []  # Add your logic here if you track product views/purchases
+
             # Prepare data for vectorization
             user_data = [{
                 'user_id': auth_user.id,
-                'product': ','.join(user_products) if user_products else '',
-                'search': ','.join(user_search) if user_search else '',
+                'product': ','.join(user_products),
+                'search': ','.join(user_search),
             }]
             df = pd.DataFrame(user_data)
 
-            # Vectorize and save vector data
+            # Vectorize and save
             user_vectors = vectorize_user_with_search(df)
             users_data.vector_data = json.dumps(user_vectors[0].tolist())
             users_data.save()
 
-        # Search products by title or category
+        # Search products
         products_by_name = Product.objects.filter(title__icontains=inp)
         products_by_category = Product.objects.filter(category__name__icontains=inp)
         products = (products_by_name | products_by_category).distinct()
 
+        return render(request, 'user/search.html', {
+            'category': types(request),
+            'user': getuser(request),
+            'query': inp,
+            'products': products
+        })
 
-
-
-
-    return render(request, 'user/search.html', {
-        'category': types(request),
-        'user': getuser(request),
-        'query': inp,
-        'products': products
-    })
-
-    # No input provided — redirect to home
+    # If request is GET or invalid
     return redirect('home')
+
+def home(request):
+    data = Product.objects.all()
+    products = []
+
+    
+    product_ids = [pro.pk for pro in data]
+    product_vectors = [json.loads(pro.vector_data) for pro in data]
+    product_vectors = np.array(product_vectors)  # Combine list of NumPy arrays to one array
+    product_vectors = torch.tensor(product_vectors)
+    print("print",request.session['username'])
+    if 'username' in request.session:
+
+        user = User.objects.get(username=request.session['username'])
+        print(request.session['username'])
+        user = users.objects.get(name=user)
+        user_vector = json.loads(user.vector_data)
+        recommend_products = recommend_product(user_vector, product_vectors, product_ids,top_n=12) 
+        print(recommend_products)
+        products = [i[0] for i  in recommend_products]
+        preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(products)])
+        products = Product.objects.filter(pk__in=products).order_by(preserved_order)
+        print(products)
+
+    
+    data2=Product.objects.all()[:4]
+    data3=Product.objects.all()[::-1][:3]
+   
+    return render(request,'base.html',{'data':data2,'products':products,'user':request.user,'type':types(request)})
 
 
 
